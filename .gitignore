@@ -1,2 +1,7 @@
 scepserver-*
 scepclient-*
+scep/testdata/.DS_Store
+scep/.DS_Store
+.gitignore
+.DS_Store
+.gitignore
