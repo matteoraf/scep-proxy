@@ -32,7 +32,7 @@ type Signer struct {
 type Option func(*Signer)
 
 // NewSigner creates a new Signer
-func NewSigner(serverUrl string, caFingerprint string, keybits int, opts ...Option) *Signer {
+func NewSigner(serverUrl string, caFingerprint string, keyBits int, opts ...Option) *Signer {
 	s := &Signer{}
 	for _, opt := range opts {
 		opt(s)
