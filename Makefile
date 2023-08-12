@@ -2,6 +2,14 @@ VERSION=$(shell git describe --tags --always --dirty)
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 OSARCH=$(shell go env GOHOSTOS)-$(shell go env GOHOSTARCH)
 
+SCEPCLIENT=\
+	scepclient-linux-amd64 \
+	scepclient-linux-arm \
+	scepclient-darwin-amd64 \
+	scepclient-darwin-arm64 \
+	scepclient-freebsd-amd64 \
+	scepclient-windows-amd64.exe
+
 SCEPSERVER=\
 	scepserver-linux-amd64 \
 	scepserver-linux-arm \
@@ -10,12 +18,26 @@ SCEPSERVER=\
 	scepserver-freebsd-amd64 \
 	scepserver-windows-amd64.exe
 
-my: scepserver-$(OSARCH)
+SCEPPROXY=\
+	scepproxy-linux-amd64 \
+	scepproxy-linux-arm \
+	scepproxy-darwin-amd64 \
+	scepproxy-darwin-arm64 \
+	scepproxy-freebsd-amd64 \
+	scepproxy-windows-amd64.exe
 
-docker: scepserver-linux-amd64
+my: scepclient-$(OSARCH) scepserver-$(OSARCH) scepproxy-$(OSARCH)
+
+docker: scepclient-linux-amd64 scepserver-linux-amd64 scepproxy-linux-amd64
+
+$(SCEPCLIENT):
+	GOOS=$(word 2,$(subst -, ,$@)) GOARCH=$(word 3,$(subst -, ,$(subst .exe,,$@))) go build $(LDFLAGS) -o $@ ./cmd/scepclient
 
 $(SCEPSERVER):
 	GOOS=$(word 2,$(subst -, ,$@)) GOARCH=$(word 3,$(subst -, ,$(subst .exe,,$@))) go build $(LDFLAGS) -o $@ ./cmd/scepserver
+
+$(SCEPPROXY):
+	GOOS=$(word 2,$(subst -, ,$@)) GOARCH=$(word 3,$(subst -, ,$(subst .exe,,$@))) go build $(LDFLAGS) -o $@ ./cmd/scepproxy
 
 %-$(VERSION).zip: %.exe
 	rm -f $@
@@ -25,10 +47,10 @@ $(SCEPSERVER):
 	rm -f $@
 	zip $@ $<
 
-release: $(foreach bin,$(SCEPSERVER),$(subst .exe,,$(bin))-$(VERSION).zip)
+release: $(foreach bin,$(SCEPCLIENT) $(SCEPSERVER) $(SCEPPROXY),$(subst .exe,,$(bin))-$(VERSION).zip)
 
 clean:
-	rm -f scepserver-*
+	rm -f scepclient-* scepserver-* scepproxy-*
 
 test:
 	go test -cover ./...
@@ -37,4 +59,4 @@ test:
 test-race:
 	go test -cover -race ./...
 
-.PHONY: my docker $(SCEPSERVER) release clean test test-race
+.PHONY: my docker $(SCEPCLIENT) $(SCEPSERVER) $(SCEPPROXY) release clean test test-race

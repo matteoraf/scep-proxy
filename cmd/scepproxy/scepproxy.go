@@ -1,4 +1,4 @@
-package main_old
+package main
 
 import (
 	"crypto/rand"
@@ -11,13 +11,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 
 	"github.com/micromdm/scep/v2/csrverifier"
 	executablecsrverifier "github.com/micromdm/scep/v2/csrverifier/executable"
 	scepdepot "github.com/micromdm/scep/v2/depot"
 	"github.com/micromdm/scep/v2/depot/file"
+	scepproxy "github.com/micromdm/scep/v2/proxy_signer"
 	scepserver "github.com/micromdm/scep/v2/server"
 
 	"github.com/go-kit/kit/log"
@@ -42,18 +42,21 @@ func main() {
 
 	//main flags
 	var (
-		flVersion           = flag.Bool("version", false, "prints version information")
-		flHTTPAddr          = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
-		flPort              = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
-		flDepotPath         = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
-		flCAPass            = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
-		flClDuration        = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
-		flClAllowRenewal    = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
+		flVersion   = flag.Bool("version", false, "prints version information")
+		flHTTPAddr  = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
+		flPort      = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
+		flDepotPath = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
+		flCAPass    = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
+		//flClDuration        = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
+		//flClAllowRenewal    = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
 		flChallengePassword = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
 		flCSRVerifierExec   = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
 		flDebug             = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
 		flLogJSON           = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
-		flSignServerAttrs   = flag.Bool("sign-server-attrs", envBool("SCEP_SIGN_SERVER_ATTRS"), "sign cert attrs for server usage")
+		//flSignServerAttrs   = flag.Bool("sign-server-attrs", envBool("SCEP_SIGN_SERVER_ATTRS"), "sign cert attrs for server usage")
+		flProxyUrl           = flag.String("proxy-url", envString("SCEP_PROXY_URL", ""), "URL to proxy requests to")
+		flProxyCaFingerprint = flag.String("proxy-fingerprint", envString("SCEP_PROXY_FINGERPRINT", ""), "Fingerprint of the CA to proxy requests to")
+		flProxyKeyBits       = flag.Int("proxy-key-length", 2048, "Key Lenght to use for proxy communication")
 	)
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -108,16 +111,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	allowRenewal, err := strconv.Atoi(*flClAllowRenewal)
-	if err != nil {
-		lginfo.Log("err", err, "msg", "No valid number for allowed renewal time")
-		os.Exit(1)
-	}
-	clientValidity, err := strconv.Atoi(*flClDuration)
-	if err != nil {
-		lginfo.Log("err", err, "msg", "No valid number for client cert validity")
-		os.Exit(1)
-	}
+
 	var csrVerifier csrverifier.CSRVerifier
 	if *flCSRVerifierExec > "" {
 		executableCSRVerifier, err := executablecsrverifier.New(*flCSRVerifierExec, lginfo)
@@ -127,6 +121,23 @@ func main() {
 		}
 		csrVerifier = executableCSRVerifier
 	}
+
+	// Set Proxy URL
+	if *flProxyUrl == "" {
+		fmt.Fprintln(os.Stderr, "Proxy Url is required")
+		os.Exit(1)
+	}
+	var proxyUrl = *flProxyUrl
+
+	// Set Proxy CA Fingerprint
+	if *flProxyCaFingerprint == "" {
+		fmt.Fprintln(os.Stderr, "Proxy CA Fingerprint is required")
+		os.Exit(1)
+	}
+	var proxyCaFingerprint = *flProxyCaFingerprint
+
+	// Set Proxy private key lenght
+	var proxyKeyBits = *flProxyKeyBits
 
 	var svc scepserver.Service // scep service
 	{
@@ -139,15 +150,11 @@ func main() {
 			lginfo.Log("err", "missing CA certificate")
 			os.Exit(1)
 		}
-		signerOpts := []scepdepot.Option{
-			scepdepot.WithAllowRenewalDays(allowRenewal),
-			scepdepot.WithValidityDays(clientValidity),
-			scepdepot.WithCAPass(*flCAPass),
+		signerOpts := []scepproxy.Option{
+			scepproxy.WithDebug(*flDebug),
 		}
-		if *flSignServerAttrs {
-			signerOpts = append(signerOpts, scepdepot.WithSeverAttrs())
-		}
-		var signer scepserver.CSRSigner = scepdepot.NewSigner(depot, signerOpts...)
+
+		var signer scepserver.CSRSigner = scepproxy.NewSigner(proxyUrl, proxyCaFingerprint, proxyKeyBits, signerOpts...)
 		if *flChallengePassword != "" {
 			signer = scepserver.ChallengeMiddleware(*flChallengePassword, signer)
 		}
