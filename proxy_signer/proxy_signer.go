@@ -25,6 +25,7 @@ type Signer struct {
 	serverUrl     string
 	caFingerprint string
 	keyBits       int
+	challenge     string
 	debug         bool
 }
 
@@ -32,11 +33,12 @@ type Signer struct {
 type Option func(*Signer)
 
 // NewSigner creates a new Signer
-func NewSigner(serverUrl string, caFingerprint string, keyBits int, opts ...Option) *Signer {
+func NewSigner(serverUrl string, caFingerprint string, keyBits int, challenge string, opts ...Option) *Signer {
 	s := &Signer{
 		serverUrl:     serverUrl,
 		caFingerprint: caFingerprint,
 		keyBits:       keyBits,
+		challenge:     challenge,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -145,7 +147,8 @@ func (s *Signer) SignCSR(m *scep.CSRReqMessage) (*x509.Certificate, error) {
 
 	// Forward challenge password
 	tmpl.CSRReqMessage = &scep.CSRReqMessage{
-		ChallengePassword: m.ChallengePassword,
+		//ChallengePassword: m.ChallengePassword,
+		ChallengePassword: s.challenge,
 	}
 
 	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger), scep.WithCertsSelector(caCertsSelector))

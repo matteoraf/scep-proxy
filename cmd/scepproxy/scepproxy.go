@@ -42,19 +42,17 @@ func main() {
 
 	//main flags
 	var (
-		flVersion   = flag.Bool("version", false, "prints version information")
-		flHTTPAddr  = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
-		flPort      = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
-		flDepotPath = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
-		flCAPass    = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
-		//flClDuration        = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
-		//flClAllowRenewal    = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
-		flChallengePassword = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
-		flCSRVerifierExec   = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
-		flDebug             = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
-		flLogJSON           = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
-		//flSignServerAttrs   = flag.Bool("sign-server-attrs", envBool("SCEP_SIGN_SERVER_ATTRS"), "sign cert attrs for server usage")
+		flVersion            = flag.Bool("version", false, "prints version information")
+		flHTTPAddr           = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
+		flPort               = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
+		flDepotPath          = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
+		flCAPass             = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
+		flChallengePassword  = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
+		flCSRVerifierExec    = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
+		flDebug              = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
+		flLogJSON            = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
 		flProxyUrl           = flag.String("proxy-url", envString("SCEP_PROXY_URL", ""), "URL to proxy requests to")
+		flProxyChallenge     = flag.String("proxy-challenge", envString("SCEP_PROXY_CHALLENGE", ""), "Challenge of the CA to proxy requests to")
 		flProxyCaFingerprint = flag.String("proxy-fingerprint", envString("SCEP_PROXY_FINGERPRINT", ""), "Fingerprint of the CA to proxy requests to")
 		flProxyKeyBits       = flag.Int("proxy-key-length", 2048, "Key Lenght to use for proxy communication")
 	)
@@ -88,7 +86,6 @@ func main() {
 
 	var logger log.Logger
 	{
-
 		if *flLogJSON {
 			logger = log.NewJSONLogger(os.Stderr)
 		} else {
@@ -136,9 +133,6 @@ func main() {
 	}
 	var proxyCaFingerprint = *flProxyCaFingerprint
 
-	// Set Proxy private key lenght
-	var proxyKeyBits = *flProxyKeyBits
-
 	var svc scepserver.Service // scep service
 	{
 		crts, key, err := depot.CA([]byte(*flCAPass))
@@ -154,7 +148,7 @@ func main() {
 			scepproxy.WithDebug(*flDebug),
 		}
 
-		var signer scepserver.CSRSigner = scepproxy.NewSigner(proxyUrl, proxyCaFingerprint, proxyKeyBits, signerOpts...)
+		var signer scepserver.CSRSigner = scepproxy.NewSigner(proxyUrl, proxyCaFingerprint, *flProxyKeyBits, *flProxyChallenge, signerOpts...)
 		if *flChallengePassword != "" {
 			signer = scepserver.ChallengeMiddleware(*flChallengePassword, signer)
 		}
