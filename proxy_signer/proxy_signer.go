@@ -33,7 +33,11 @@ type Option func(*Signer)
 
 // NewSigner creates a new Signer
 func NewSigner(serverUrl string, caFingerprint string, keyBits int, opts ...Option) *Signer {
-	s := &Signer{}
+	s := &Signer{
+		serverUrl:     serverUrl,
+		caFingerprint: caFingerprint,
+		keyBits:       keyBits,
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
