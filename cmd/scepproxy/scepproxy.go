@@ -52,7 +52,6 @@ func main() {
 		flDebug              = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
 		flLogJSON            = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
 		flProxyUrl           = flag.String("proxy-url", envString("SCEP_PROXY_URL", ""), "URL to proxy requests to")
-		flProxyChallenge     = flag.String("proxy-challenge", envString("SCEP_PROXY_CHALLENGE", ""), "Challenge of the CA to proxy requests to")
 		flProxyCaFingerprint = flag.String("proxy-fingerprint", envString("SCEP_PROXY_FINGERPRINT", ""), "Fingerprint of the CA to proxy requests to")
 		flProxyKeyBits       = flag.Int("proxy-key-length", 2048, "Key Lenght to use for proxy communication")
 	)
@@ -124,14 +123,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Proxy Url is required")
 		os.Exit(1)
 	}
-	var proxyUrl = *flProxyUrl
 
 	// Set Proxy CA Fingerprint
 	if *flProxyCaFingerprint == "" {
 		fmt.Fprintln(os.Stderr, "Proxy CA Fingerprint is required")
 		os.Exit(1)
 	}
-	var proxyCaFingerprint = *flProxyCaFingerprint
 
 	var svc scepserver.Service // scep service
 	{
@@ -148,7 +145,7 @@ func main() {
 			scepproxy.WithDebug(*flDebug),
 		}
 
-		var signer scepserver.CSRSigner = scepproxy.NewSigner(proxyUrl, proxyCaFingerprint, *flProxyKeyBits, *flProxyChallenge, signerOpts...)
+		var signer scepserver.CSRSigner = scepproxy.NewSigner(*flProxyUrl, *flProxyCaFingerprint, *flProxyKeyBits, signerOpts...)
 		if *flChallengePassword != "" {
 			signer = scepserver.ChallengeMiddleware(*flChallengePassword, signer)
 		}

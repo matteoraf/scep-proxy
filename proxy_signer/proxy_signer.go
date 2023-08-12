@@ -25,7 +25,6 @@ type Signer struct {
 	serverUrl     string
 	caFingerprint string
 	keyBits       int
-	challenge     string
 	debug         bool
 }
 
@@ -33,12 +32,11 @@ type Signer struct {
 type Option func(*Signer)
 
 // NewSigner creates a new Signer
-func NewSigner(serverUrl string, caFingerprint string, keyBits int, challenge string, opts ...Option) *Signer {
+func NewSigner(serverUrl string, caFingerprint string, keyBits int, opts ...Option) *Signer {
 	s := &Signer{
 		serverUrl:     serverUrl,
 		caFingerprint: caFingerprint,
 		keyBits:       keyBits,
-		challenge:     challenge,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -120,22 +118,9 @@ func (s *Signer) SignCSR(m *scep.CSRReqMessage) (*x509.Certificate, error) {
 		logCerts(level.Debug(logger), certs)
 	}
 
-	// Need to understand if and how to handle RenewalReq
-	// This would require the RA to sign the envelope using the
-	// existing client key, which is of course not possibile
-	/*
-		var msgType scep.MessageType
-		{
-			// TODO validate CA and set UpdateReq if needed
-			if cert != nil {
-				msgType = scep.RenewalReq
-			} else {
-				msgType = scep.PKCSReq
-			}
-		}
-	*/
-
-	// We set the message type as a new certificate request
+	// The proxy isn't aware of the PKImessage type received from the client
+	// It just receives the CSRReqMesage
+	// As such, we always set the message type as a new certificate request
 	var msgType scep.MessageType = scep.PKCSReq
 
 	tmpl := &scep.PKIMessage{
@@ -147,8 +132,7 @@ func (s *Signer) SignCSR(m *scep.CSRReqMessage) (*x509.Certificate, error) {
 
 	// Forward challenge password
 	tmpl.CSRReqMessage = &scep.CSRReqMessage{
-		//ChallengePassword: m.ChallengePassword,
-		ChallengePassword: s.challenge,
+		ChallengePassword: m.ChallengePassword,
 	}
 
 	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger), scep.WithCertsSelector(caCertsSelector))
