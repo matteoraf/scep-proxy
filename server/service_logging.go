@@ -23,6 +23,7 @@ func (mw *loggingService) GetCACaps(ctx context.Context) (caps []byte, err error
 			"method", "GetCACaps",
 			"err", err,
 			"took", time.Since(begin),
+			"host", GetRemoteAddr(ctx),
 		)
 	}(time.Now())
 	caps, err = mw.Service.GetCACaps(ctx)
@@ -36,6 +37,7 @@ func (mw *loggingService) GetCACert(ctx context.Context, message string) (cert [
 			"message", message,
 			"err", err,
 			"took", time.Since(begin),
+			"host", GetRemoteAddr(ctx),
 		)
 	}(time.Now())
 	cert, certNum, err = mw.Service.GetCACert(ctx, message)
@@ -48,6 +50,7 @@ func (mw *loggingService) PKIOperation(ctx context.Context, data []byte) (certRe
 			"method", "PKIOperation",
 			"err", err,
 			"took", time.Since(begin),
+			"host", GetRemoteAddr(ctx),
 		)
 	}(time.Now())
 	certRep, err = mw.Service.PKIOperation(ctx, data)

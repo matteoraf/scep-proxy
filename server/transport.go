@@ -17,25 +17,53 @@ import (
 	"github.com/pkg/errors"
 )
 
+type contextKey string
+
+var contextKeyHost = contextKey("host")
+
+// Add remoteAddr to http.Request context
+func UseRequestAddr(next http.Handler) http.HandlerFunc {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		remoteAddr := r.RemoteAddr
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, contextKeyHost, remoteAddr)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+	return fn
+}
+
+// Getter func for remoteAddr
+func GetRemoteAddr(ctx context.Context) string {
+	remoteAddr, ok := ctx.Value(contextKeyHost).(string)
+	if !ok {
+		return ""
+	}
+	return remoteAddr
+}
+
 func MakeHTTPHandler(e *Endpoints, svc Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
 		kithttp.ServerErrorLogger(logger),
 		kithttp.ServerFinalizer(logutil.NewHTTPLogger(logger).LoggingFinalizer),
 	}
 
-	r := mux.NewRouter()
-	r.Methods("GET").Path("/scep").Handler(kithttp.NewServer(
+	getHandler := kithttp.NewServer(
 		e.GetEndpoint,
 		decodeSCEPRequest,
 		encodeSCEPResponse,
 		opts...,
-	))
-	r.Methods("POST").Path("/scep").Handler(kithttp.NewServer(
+	)
+
+	postHandler := kithttp.NewServer(
 		e.PostEndpoint,
 		decodeSCEPRequest,
 		encodeSCEPResponse,
 		opts...,
-	))
+	)
+
+	r := mux.NewRouter()
+	r.Methods("GET").Path("/scep").Handler(UseRequestAddr(getHandler))
+	r.Methods("POST").Path("/scep").Handler(UseRequestAddr(postHandler))
 
 	return r
 }

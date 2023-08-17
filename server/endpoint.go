@@ -176,6 +176,7 @@ func EndpointLoggingMiddleware(logger log.Logger) endpoint.Middleware {
 	return func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 			var keyvals []interface{}
+			keyvals = append(keyvals, "host", GetRemoteAddr(ctx))
 			// check if this is a scep endpoint, if it is, append the method to the log.
 			if oper, ok := request.(interface {
 				scepOperation() string
