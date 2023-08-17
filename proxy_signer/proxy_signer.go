@@ -58,6 +58,7 @@ func (s *Signer) SignCSR(m *scep.CSRReqMessage) (*x509.Certificate, error) {
 		logger = log.NewLogfmtLogger(os.Stderr)
 		stdlog.SetOutput(log.NewStdlibAdapter(logger))
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+		logger = log.With(logger, "component", "proxy_signer")
 		if !s.debug {
 			logger = level.NewFilter(logger, level.AllowInfo())
 		}
