@@ -61,9 +61,26 @@ func MakeHTTPHandler(e *Endpoints, svc Service, logger kitlog.Logger) http.Handl
 		opts...,
 	)
 
+	// This handles non-existing routes and just returns 403 and logs the request with the host address
+	nonExistingHandler := kithttp.NewServer(
+		func(ctx context.Context, request interface{}) (response interface{}, err error) {
+			return struct{}{}, nil
+		},
+		func(ctx context.Context, r *http.Request) (interface{}, error) {
+			logger.Log("filter", "fail2ban", "host", r.RemoteAddr)
+			return struct{}{}, nil
+		},
+		func(ctx context.Context, w http.ResponseWriter, e interface{}) error {
+			http.Error(w, "", http.StatusForbidden)
+			return nil
+		},
+		opts...)
+
 	r := mux.NewRouter()
 	r.Methods("GET").Path("/scep").Handler(UseRequestAddr(getHandler))
 	r.Methods("POST").Path("/scep").Handler(UseRequestAddr(postHandler))
+	r.PathPrefix("/").Handler(UseRequestAddr(nonExistingHandler))
+	r.PathPrefix("/scep").Handler(UseRequestAddr(nonExistingHandler))
 
 	return r
 }
