@@ -25,6 +25,11 @@ var contextKeyHost = contextKey("host")
 func UseRequestAddr(next http.Handler) http.HandlerFunc {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		remoteAddr := r.RemoteAddr
+		// This is to support being behind a Cloudflare Proxy
+		cloudflareProxiedAddr := r.Header.Get("CF-Connecting-IP")
+		if cloudflareProxiedAddr != "" {
+			remoteAddr = cloudflareProxiedAddr
+		}
 		ctx := context.Background()
 		ctx = context.WithValue(ctx, contextKeyHost, remoteAddr)
 		next.ServeHTTP(w, r.WithContext(ctx))
