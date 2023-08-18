@@ -11,7 +11,7 @@ Minimal example for proxy.
 # create a new CA
 ./scepserver-linux-amd64 ca -init
 # start server
-./scepproxy-linux-amd64 -depot depot -challenge=secret1234 -proxy-url="http://my_scep_ca/ca" -proxy-fingerprint="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" -proxy-key-length=2048
+./scepproxy-linux-amd64 -scep-endpoint=myCustomEndpoint -depot depot -challenge=secret1234 -proxy-url="http://my_scep_ca/ca" -proxy-fingerprint="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" -proxy-key-length=2048
 
 ```
 
@@ -21,13 +21,15 @@ The default flags configure and run the scep proxy.
 
 `-depot` must be the path to a folder with `ca.pem` and `ca.key` files.  If you don't already have a CA to use, you can create one using the `ca` subcommand.
 
-The scepproxy provides one HTTP endpoint, `/scep`, that facilitates the normal PKIOperation/Message parameters.
+The scepproxy provides an HTTP endpoint which you can select by using the `-scep-endpoint` flag, it defaults to `/scep`.
 
 Server usage:
 ```sh
 $ ./scepproxy-linux-amd64 -help
   -proxy-url string
     	URL to proxy requests to
+  -`-scep-endpoint`
+      SCEP endpoint,  default to /scep
   -proxy-fingerprint string
     	Fingerprint of the CA to proxy requests to
   -proxy-key-length int
@@ -48,3 +50,7 @@ $ ./scepproxy-linux-amd64 -help
     	prints version information
 
 ```
+
+## Logging
+I implemented some additional logging, in order to have the remoteAddr logged togheter with the already provided information.
+My goal is to use this with a custom fail2ban filter in order to block hosts sending unauthorized requests.
