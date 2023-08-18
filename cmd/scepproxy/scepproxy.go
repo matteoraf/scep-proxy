@@ -140,8 +140,6 @@ func main() {
 		}
 	}
 
-	fmt.Println(scepEndpoint)
-
 	// Set Proxy URL
 	if *flProxyUrl == "" {
 		fmt.Fprintln(os.Stderr, "Proxy Url is required")
