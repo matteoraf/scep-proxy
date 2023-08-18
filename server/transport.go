@@ -41,7 +41,7 @@ func GetRemoteAddr(ctx context.Context) string {
 	return remoteAddr
 }
 
-func MakeHTTPHandler(e *Endpoints, svc Service, logger kitlog.Logger) http.Handler {
+func MakeHTTPHandler(e *Endpoints, svc Service, path string, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
 		kithttp.ServerErrorLogger(logger),
 		kithttp.ServerFinalizer(logutil.NewHTTPLogger(logger).LoggingFinalizer),
@@ -77,10 +77,10 @@ func MakeHTTPHandler(e *Endpoints, svc Service, logger kitlog.Logger) http.Handl
 		opts...)
 
 	r := mux.NewRouter()
-	r.Methods("GET").Path("/scep").Handler(UseRequestAddr(getHandler))
-	r.Methods("POST").Path("/scep").Handler(UseRequestAddr(postHandler))
+	r.Methods("GET").Path(path).Handler(UseRequestAddr(getHandler))
+	r.Methods("POST").Path(path).Handler(UseRequestAddr(postHandler))
 	r.PathPrefix("/").Handler(UseRequestAddr(nonExistingHandler))
-	r.PathPrefix("/scep").Handler(UseRequestAddr(nonExistingHandler))
+	r.PathPrefix(path).Handler(UseRequestAddr(nonExistingHandler))
 
 	return r
 }

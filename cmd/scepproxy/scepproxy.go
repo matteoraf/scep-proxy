@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -43,6 +44,7 @@ func main() {
 	//main flags
 	var (
 		flVersion            = flag.Bool("version", false, "prints version information")
+		flEndpoint           = flag.String("scep-endpoint", envString("SCEP_ENDPOINT", "/scep"), "SCEP endpoint,  default to /scep")
 		flHTTPAddr           = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
 		flPort               = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
 		flDepotPath          = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
@@ -118,6 +120,28 @@ func main() {
 		csrVerifier = executableCSRVerifier
 	}
 
+	var scepEndpoint string
+	if *flEndpoint == "" {
+		// Set default to /scep if empty
+		scepEndpoint = "/scep"
+	} else {
+		// Parse
+		url, err := url.Parse(*flEndpoint)
+		if err != nil {
+			lginfo.Log("err", err, "msg", "Invalid Path", "path", *flEndpoint)
+			os.Exit(1)
+		}
+		// Retrieve the path
+		scepEndpoint = url.Path
+
+		// Check if first char is /, if missing add it
+		if scepEndpoint[0:1] != "/" {
+			scepEndpoint = "/" + scepEndpoint
+		}
+	}
+
+	fmt.Println(scepEndpoint)
+
 	// Set Proxy URL
 	if *flProxyUrl == "" {
 		fmt.Fprintln(os.Stderr, "Proxy Url is required")
@@ -165,13 +189,13 @@ func main() {
 		e := scepserver.MakeServerEndpoints(svc)
 		e.GetEndpoint = scepserver.EndpointLoggingMiddleware(lginfo)(e.GetEndpoint)
 		e.PostEndpoint = scepserver.EndpointLoggingMiddleware(lginfo)(e.PostEndpoint)
-		h = scepserver.MakeHTTPHandler(e, svc, log.With(lginfo, "component", "http"))
+		h = scepserver.MakeHTTPHandler(e, svc, scepEndpoint, log.With(lginfo, "component", "http"))
 	}
 
 	// start http server
 	errs := make(chan error, 2)
 	go func() {
-		lginfo.Log("transport", "http", "address", httpAddr, "msg", "listening")
+		lginfo.Log("transport", "http", "address", httpAddr, "path", scepEndpoint, "msg", "listening")
 		errs <- http.ListenAndServe(httpAddr, h)
 	}()
 	go func() {
