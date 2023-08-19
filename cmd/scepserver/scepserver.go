@@ -43,19 +43,21 @@ func main() {
 
 	//main flags
 	var (
-		flVersion           = flag.Bool("version", false, "prints version information")
-		flEndpoint          = flag.String("scep-endpoint", envString("SCEP_ENDPOINT", "/scep"), "SCEP endpoint, default to /scep")
-		flHTTPAddr          = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
-		flPort              = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
-		flDepotPath         = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
-		flCAPass            = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
-		flClDuration        = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
-		flClAllowRenewal    = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
-		flChallengePassword = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
-		flCSRVerifierExec   = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
-		flDebug             = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
-		flLogJSON           = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
-		flSignServerAttrs   = flag.Bool("sign-server-attrs", envBool("SCEP_SIGN_SERVER_ATTRS"), "sign cert attrs for server usage")
+		flVersion            = flag.Bool("version", false, "prints version information")
+		flEndpoint           = flag.String("scep-endpoint", envString("SCEP_ENDPOINT", "/scep"), "SCEP endpoint, default to /scep")
+		flHTTPAddr           = flag.String("http-addr", envString("SCEP_HTTP_ADDR", ""), "http listen address. defaults to \":8080\"")
+		flPort               = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "http port to listen on (if you want to specify an address, use -http-addr instead)")
+		flDepotPath          = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
+		flCAPass             = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
+		flClDuration         = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
+		flClAllowRenewal     = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
+		flChallengePassword  = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
+		flCSRVerifierExec    = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
+		flDebug              = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
+		flLogJSON            = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
+		flSignServerAttrs    = flag.Bool("sign-server-attrs", envBool("SCEP_SIGN_SERVER_ATTRS"), "sign cert attrs for server usage")
+		flExtProxyIpFilePath = flag.String("ext-proxy-ip-file", envString("EXT_PROXY_IP_FILE", ""), "Path to the file containing the CIDRs (one per line) of your external proxy (eg. Cloudflare)")
+		flExtProxyHeaderKey  = flag.String("ext-proxy-header", envString("EXT_PROXY_HEADER_KEY", ""), "The header key containing the origin IP (for Cloudflare is CF-Connecting-IP)")
 	)
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -133,6 +135,7 @@ func main() {
 	var scepEndpoint string
 	if *flEndpoint == "" {
 		// Set default to /scep if empty
+		lginfo.Log("msg", "Empty scep endpoint was provided, setting it to /scep")
 		scepEndpoint = "/scep"
 	} else {
 		// Parse
@@ -148,6 +151,15 @@ func main() {
 		if scepEndpoint[0:1] != "/" {
 			scepEndpoint = "/" + scepEndpoint
 		}
+	}
+
+	// If one of the two has been provided and the other is not, error out
+	if (*flExtProxyIpFilePath != "") != (*flExtProxyHeaderKey != "") {
+		fmt.Fprintln(os.Stderr, "Both ext-proxy-ip-file and ext-proxy-header must be provided")
+		os.Exit(1)
+	} else if (*flExtProxyIpFilePath != "") && (*flExtProxyHeaderKey != "") {
+		scepserver.SetIpFilePath(*flExtProxyIpFilePath)
+		scepserver.SetHeaderKey(*flExtProxyHeaderKey)
 	}
 
 	var svc scepserver.Service // scep service

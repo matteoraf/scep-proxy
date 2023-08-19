@@ -24,12 +24,7 @@ var contextKeyHost = contextKey("host")
 // Add remoteAddr to http.Request context
 func UseRequestAddr(next http.Handler) http.HandlerFunc {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		remoteAddr := r.RemoteAddr
-		// This is to support being behind a Cloudflare Proxy
-		cloudflareProxiedAddr := r.Header.Get("CF-Connecting-IP")
-		if cloudflareProxiedAddr != "" {
-			remoteAddr = cloudflareProxiedAddr
-		}
+		remoteAddr := decodeRemoteAddr(r)
 		ctx := context.Background()
 		ctx = context.WithValue(ctx, contextKeyHost, remoteAddr)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -72,7 +67,7 @@ func MakeHTTPHandler(e *Endpoints, svc Service, path string, logger kitlog.Logge
 			return struct{}{}, nil
 		},
 		func(ctx context.Context, r *http.Request) (interface{}, error) {
-			logger.Log("filter", "fail2ban", "host", r.RemoteAddr)
+			logger.Log("filter", "fail2ban", "host", GetRemoteAddr(ctx))
 			return struct{}{}, nil
 		},
 		func(ctx context.Context, w http.ResponseWriter, e interface{}) error {

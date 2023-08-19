@@ -23,17 +23,33 @@ The default flags configure and run the scep proxy.
 
 The scepproxy provides an HTTP endpoint which you can select by using the `-scep-endpoint` flag, it defaults to `/scep`.
 
+
+## A proxy behind a proxy
+If you run behind an external L7 proxy (eg. Cloduflare) which sends you the origin IP in an header, you can provide a list of IPs belonging to your proxy and the key of the header where the origin IP will be sent.
+This enables logging with the correct IP, so that tools like fail2ban can do their job.
+Both `ext-proxy-ip-file` and `ext-proxy-header` flags must be provided in that case.
+The file must contain nets in CIDR notation (eg. 1.2.3.4/20), one per each line.
+
+Eg. to get the Cloudflare IPs in a file:
+```
+wget -O /etc/scepproxy/cloudflareips https://www.cloudflare.com/ips-v4 && echo "" >> /etc/scepproxy/cloudflareips &&  wget -O - https://www.cloudflare.com/ips-v6 >> /etc/scepproxy/cloudflareips
+```
+
 Server usage:
 ```sh
 $ ./scepproxy-linux-amd64 -help
+  -scep-endpoint
+      SCEP endpoint,  default to /scep
   -proxy-url string
     	URL to proxy requests to
-  -`-scep-endpoint`
-      SCEP endpoint,  default to /scep
   -proxy-fingerprint string
     	Fingerprint of the CA to proxy requests to
   -proxy-key-length int
     	Key Lenght to use for proxy communication (default 2048)
+  -ext-proxy-ip-file
+      Path to the file containing the CIDRs (one per line) of your external proxy (eg. Cloudflare)
+  -ext-proxy-header
+      The header key containing the origin IP (for Cloudflare is CF-Connecting-IP)
   -challenge string
     	enforce a challenge password (same will be used for the proxied CA)
   -csrverifierexec string
