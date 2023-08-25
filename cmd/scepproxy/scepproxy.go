@@ -3,8 +3,10 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -58,6 +60,9 @@ func main() {
 		flProxyKeyBits       = flag.Int("proxy-key-length", 2048, "Key Lenght to use for proxy communication")
 		flExtProxyIpFilePath = flag.String("ext-proxy-ip-file", envString("EXT_PROXY_IP_FILE", ""), "Path to the file containing the CIDRs (one per line) of your external proxy (eg. Cloudflare)")
 		flExtProxyHeaderKey  = flag.String("ext-proxy-header", envString("EXT_PROXY_HEADER_KEY", ""), "The header key containing the origin IP (for Cloudflare is CF-Connecting-IP)")
+		flSslCertPath        = flag.String("ssl-cert-path", envString("SSL_CERT_PATH", ""), "Path to the SSL Certificate to run https")
+		flSslKeyPath         = flag.String("ssl-key-path", envString("SSL_KEY_PATH", ""), "Path to the SSL Key to run https")
+		flSslKeyPass         = flag.String("ssl-key-pass", envString("SSL_KEY_PASS", ""), "Password to decrypt the SSL Key")
 	)
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -164,6 +169,26 @@ func main() {
 		scepserver.SetHeaderKey(*flExtProxyHeaderKey)
 	}
 
+	// Load SSL Cert-Key
+	var sslCert []byte
+	var sslKey []byte
+	// If one of the two has been provided and the other is not, error out
+	if (*flSslCertPath != "") != (*flSslKeyPath != "") {
+		fmt.Fprintln(os.Stderr, "Both SSL Certificate and Private Key must be provided")
+		os.Exit(1)
+	} else if (*flSslCertPath != "") && (*flSslKeyPath != "") {
+		sslCert, err = loadCert(*flSslCertPath)
+		if err != nil {
+			lginfo.Log("err", err)
+			os.Exit(1)
+		}
+		sslKey, err = loadKey(*flSslKeyPath, []byte(*flSslKeyPass))
+		if err != nil {
+			lginfo.Log("err", err)
+			os.Exit(1)
+		}
+	}
+
 	var svc scepserver.Service // scep service
 	{
 		crts, key, err := depot.CA([]byte(*flCAPass))
@@ -202,12 +227,43 @@ func main() {
 		h = scepserver.MakeHTTPHandler(e, svc, scepEndpoint, log.With(lginfo, "component", "http"))
 	}
 
-	// start http server
+	// Start https or http server
+	// Took inspiration from https://medium.com/@prateeknischal25/using-encrypted-private-keys-with-golang-server-379919955854
 	errs := make(chan error, 2)
 	go func() {
 		lginfo.Log("transport", "http", "address", httpAddr, "path", scepEndpoint, "msg", "listening")
-		errs <- http.ListenAndServe(httpAddr, h)
+		// If there's a valid SSL Cert + Key pair, run ListenAndServeTLS
+		if (*flSslCertPath != "") && (*flSslKeyPath != "") {
+			// Create the keypair
+			c, err := tls.X509KeyPair(sslCert, sslKey)
+			if err != nil {
+				lginfo.Log("Unable to start https server. Err: ", err)
+				os.Exit(1)
+			}
+			// Create TLS Config
+			cfg := &tls.Config{
+				MinVersion:               tls.VersionTLS12,
+				PreferServerCipherSuites: true,
+				CipherSuites: []uint16{
+					tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+				},
+				Certificates: []tls.Certificate{c},
+			}
+			srv := &http.Server{
+				Addr:         httpAddr,
+				Handler:      h,
+				TLSConfig:    cfg,
+				TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+			}
+
+			errs <- srv.ListenAndServeTLS("", "")
+
+		} else {
+			errs <- http.ListenAndServe(httpAddr, h)
+		}
 	}()
+
 	go func() {
 		c := make(chan os.Signal)
 		signal.Notify(c, syscall.SIGINT)
@@ -348,4 +404,62 @@ func setByUser(flagName, envName string) bool {
 	flagSet := userDefinedFlags[flagName]
 	_, envSet := os.LookupEnv(envName)
 	return flagSet || envSet
+}
+
+// Load Cert
+func loadCert(path string) (certPemData []byte, err error) {
+	f, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.New("Unable to read file at " + path + "Error: " + err.Error())
+	}
+
+	var pemData []byte
+	var b *pem.Block
+
+	for {
+		b, f = pem.Decode(f)
+		if b == nil {
+			break
+		}
+		if b.Type != certificatePEMBlockType {
+			return nil, errors.New("unable to load SSL Certificate, unmatched type or headers")
+		}
+		pemData = append(pemData, pem.EncodeToMemory(b)...)
+	}
+
+	if len(pemData) == 0 {
+		return nil, errors.New("no certificate found in file")
+	}
+
+	return pemData, nil
+}
+
+// Load an encrypted private key from disk
+func loadKey(path string, password []byte) (decryptedKeyPemData []byte, err error) {
+	f, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.New("unable to read file at " + path + "Error: " + err.Error())
+	}
+
+	pemBlock, _ := pem.Decode(f)
+	if pemBlock == nil {
+		return nil, errors.New("unable to load SSL Private Key, PEM decode failed")
+	}
+	/*
+		if pemBlock.Type != rsaPrivateKeyPEMBlockType {
+			return nil, errors.New("unable to load SSL Private Key, unmatched type or headers. Key type must be " + rsaPrivateKeyPEMBlockType)
+		}
+	*/
+	if x509.IsEncryptedPEMBlock(pemBlock) {
+		b, err := x509.DecryptPEMBlock(pemBlock, password)
+		if err != nil {
+			return nil, errors.New("unable to load SSL Private Key - Error: " + err.Error())
+		}
+		key := &pem.Block{
+			Type:  pemBlock.Type,
+			Bytes: b,
+		}
+		return pem.EncodeToMemory(key), nil
+	}
+	return pem.EncodeToMemory(pemBlock), nil
 }
