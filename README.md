@@ -46,6 +46,12 @@ $ ./scepproxy-linux-amd64 -help
     	Fingerprint of the CA to proxy requests to
   -proxy-key-length int
     	Key Lenght to use for proxy communication (default 2048)
+  -ssl-cert-path
+    	Path to the SSL Certificate to run https
+  -ssl-key-path
+    	Path to the SSL Key to run https
+  -ssl-key-pass
+        Password to decrypt the SSL Key
   -ext-proxy-ip-file
       Path to the file containing the CIDRs (one per line) of your external proxy (eg. Cloudflare)
   -ext-proxy-header
